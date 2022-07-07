@@ -38,6 +38,24 @@ fn generate_build_struct_fields(st: &DeriveInput) -> Result<proc_macro2::TokenSt
     Ok(res)
 }
 
+fn generate_execuable_fn(st: &DeriveInput) -> Result<proc_macro2::TokenStream> {
+    let fields = get_fields_from_derive_input(st)?;
+    let res = fields
+        .iter()
+        .map(|f| {
+            let ident = &f.ident;
+            let ty = &f.ty;
+            quote::quote!(
+                fn #ident(&mut self, #ident: #ty) -> &mut Self {
+                    self.#ident = Some(#ident);
+                    self
+                }
+            )
+        })
+        .collect();
+    Ok(res)
+}
+
 fn generate_build_struct_factory_init_clasuses(
     st: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream> {
@@ -58,6 +76,7 @@ fn do_expand(st: &DeriveInput) -> Result<proc_macro2::TokenStream> {
 
     let fields = generate_build_struct_fields(&st)?;
     let init_clauses = generate_build_struct_factory_init_clasuses(&st)?;
+    let execuable_fn = generate_execuable_fn(&st)?;
     let res = quote::quote!(
         #[derive(Debug)]
         pub struct #builder_name_ident {
@@ -69,6 +88,9 @@ fn do_expand(st: &DeriveInput) -> Result<proc_macro2::TokenStream> {
                     #init_clauses
                 }
             }
+        }
+        impl #builder_name_ident {
+            #execuable_fn
         }
     );
     Ok(res)
