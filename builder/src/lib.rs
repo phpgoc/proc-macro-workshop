@@ -68,6 +68,35 @@ fn generate_build_struct_factory_init_clasuses(
     Ok(res)
 }
 
+fn generate_build_fn(st: &DeriveInput) -> Result<proc_macro2::TokenStream> {
+    let fields = get_fields_from_derive_input(st)?;
+    let struct_ident = &st.ident;
+    let idents = fields.iter().map(|f| &f.ident).collect::<Vec<_>>();
+
+    let mut assert_block = Vec::new();
+    for field in fields {
+        let ident = &field.ident;
+
+        assert_block.push(quote::quote!(
+            if self.#ident.is_none() {
+                return std::result::Result::Err( "Missing required field".into());
+            }
+        ));
+    }
+    let ret_block = quote::quote!(
+        Ok(#struct_ident {
+            #(#idents: self.#idents.clone().unwrap()),*
+        })
+    );
+
+    let res = quote::quote!(
+        fn build(&self) -> std::result::Result<#struct_ident, Box<dyn std::error::Error>> {
+            #(#assert_block)*
+            #ret_block
+        }
+    );
+    Ok(res)
+}
 fn do_expand(st: &DeriveInput) -> Result<proc_macro2::TokenStream> {
     let struct_name = st.ident.to_string();
     let builder_name_iteral = format!("{}Builder", struct_name);
@@ -77,6 +106,7 @@ fn do_expand(st: &DeriveInput) -> Result<proc_macro2::TokenStream> {
     let fields = generate_build_struct_fields(&st)?;
     let init_clauses = generate_build_struct_factory_init_clasuses(&st)?;
     let execuable_fn = generate_execuable_fn(&st)?;
+    let build_fn = generate_build_fn(&st)?;
     let res = quote::quote!(
         #[derive(Debug)]
         pub struct #builder_name_ident {
@@ -91,6 +121,7 @@ fn do_expand(st: &DeriveInput) -> Result<proc_macro2::TokenStream> {
         }
         impl #builder_name_ident {
             #execuable_fn
+            #build_fn
         }
     );
     Ok(res)
